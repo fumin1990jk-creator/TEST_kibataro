@@ -138,10 +138,6 @@
         <label class="form-label">電話番号</label>
         <input class="app-input" type="tel" name="tel" id="tel" placeholder="例：09012345678" />
       </div>
-      <div class="input-box">
-        <label class="form-label">個人番号</label>
-        <input class="app-input" type="text" name="idnumber" id="idnumber" placeholder="例：1234-5678-9012" />
-      </div>
       <div class="btn-group">
         <button class="app-btn" type="submit">取引内容確認</button>
         <button class="app-btn" type="reset">入力クリア</button>
@@ -155,7 +151,6 @@
       以下のQRコードをSmartcashstationでお読み取り下さい
     </div>
     <img id="qr-image" class="qr-code-img" src="" alt="QR Code" />
-    <div style="text-align:center; font-size:13px; color:#888;"><span id="qr-data-preview"></span></div>
     <div class="btn-group" style="margin-top:18px;">
       <button class="app-btn" type="button" id="finishButton">取引完了</button>
       <button class="app-btn gray" type="button" id="cancelButton">キャンセル</button>
@@ -202,59 +197,44 @@
     const formContainer = document.getElementById('form-container');
     const qrContainer = document.getElementById('qr-container');
     const qrImage = document.getElementById('qr-image');
-    const qrDataPreview = document.getElementById('qr-data-preview');
 
-    // QRコード生成仕様: 100;受付番号;日付;時間;Abcdefghij
+    // QRコード生成: 100;受付番号;日付;時間;Abcdefghij
     function padZero(num, length) {
       return num.toString().padStart(length, '0');
     }
     function createQRData(type) {
       // 店番
       const store = '100';
-
-      // 今日の日付（YYYYMMDD/10桁 or 8桁）
+      // 日付データ
       const now = new Date();
       const yyyy = now.getFullYear();
       const mm = padZero(now.getMonth() + 1, 2);
       const dd = padZero(now.getDate(), 2);
-
       // 受付番号=入金:1, 出金:2
       const kindNu = type === 'deposit' ? '1' : '2';
-
-      // 受付番号組み立て（YYYYMMDD + "00000000" + 入出金番号1or2）
+      // 受付番号: YYYYMMDD + "00000000" + 1or2
       const uketukeNo = `${yyyy}${mm}${dd}00000000${kindNu}`;
-
-      // 発券日（YYYY-MM-DD）
+      // 発券日: YYYY-MM-DD
       const hyoukeibi = `${yyyy}-${mm}-${dd}`;
-
-      // 発券時間（hh:mm, 24時間）
+      // 時間 hh:mm
       const h = padZero(now.getHours(), 2);
       const m = padZero(now.getMinutes(), 2);
       const hyouketime = `${h}:${m}`;
-
       // ダミー
       const dummy = "Abcdefghij";
-
-      // セミコロン区切りで
+      // 連結
       return [store, uketukeNo, hyoukeibi, hyouketime, dummy].join(';');
     }
 
     document.getElementById('transactionForm').addEventListener('submit', function(e){
       e.preventDefault();
-
-      // 取引種別（入金/出金）
+      // 取引種別
       const type = document.querySelector('input[name="type"]:checked').value;
-
       // QRデータ生成
       const qrData = createQRData(type);
-
-      // 画面にも内容をプレビュー
-      qrDataPreview.textContent = qrData;
-
-      // APIに渡すURLを生成
+      // QR生成API
       const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(qrData)}`;
       qrImage.src = qrSrc;
-
       formContainer.style.display = 'none';
       qrContainer.style.display = 'block';
     });
@@ -263,7 +243,6 @@
       qrContainer.style.display = 'none';
       formContainer.style.display = 'block';
       document.getElementById('transactionForm').reset();
-      qrDataPreview.textContent = '';
     }
     document.getElementById('finishButton').addEventListener('click', resetToForm);
     document.getElementById('cancelButton').addEventListener('click', resetToForm);
