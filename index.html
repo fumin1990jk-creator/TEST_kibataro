@@ -16,8 +16,9 @@
       text-align: center;
       padding: 18px 0;
       font-size: 20px;
-      letter-spacing: 0.1em;
       font-weight: bold;
+      border-radius: 0 0 8px 8px;
+      letter-spacing: 0.1em;
     }
     .app-container {
       background: #fff;
@@ -75,6 +76,26 @@
     .app-btn:active {
       background: #175080;
     }
+    .app-btn.gray {
+      background: #b0bac7;
+      color: #333;
+    }
+    .qr-guide {
+      color: #222;
+      font-size: 16px;
+      margin-bottom: 24px;
+      margin-top: 10px;
+      text-align: center;
+    }
+    .qr-code-img {
+      display: block;
+      margin: 24px auto 30px auto;
+      width: 180px;
+      height: 180px;
+      background: #eee;
+      border-radius: 16px;
+      object-fit: contain;
+    }
     @media (max-width: 480px) {
       .app-container {
         padding: 16px 6vw 14px 6vw;
@@ -86,38 +107,136 @@
   <div class="app-header">
     スマホ入出金予約アプリ
   </div>
-  <div class="app-container">
-    <form>
+
+  <!-- 編集フォーム -->
+  <div class="app-container" id="form-container">
+    <form autocomplete="off" id="transactionForm">
       <div class="form-label">取引選択</div>
       <div class="radio-group">
-        <label><input type="radio" name="type" value="deposit" checked> 入金</label>
-        <label><input type="radio" name="type" value="withdraw"> 出金</label>
+        <label><input type="radio" name="type" value="100" checked> 入金</label>
+        <label><input type="radio" name="type" value="200"> 出金</label>
       </div>
       <div class="input-box">
         <label class="form-label">取引金額</label>
-        <input class="app-input" type="number" placeholder="例：10000">
+        <input class="app-input"
+               type="text"
+               id="display_amount"
+               inputmode="numeric"
+               placeholder="例：10,000"
+               maxlength="15" />
+        <input type="hidden" id="amount" name="amount" value="" />
       </div>
       <div class="input-box">
-        <label class="form-label">お名前</label>
-        <input class="app-input" type="text" placeholder="例：山田太郎">
+        <label class="form-label">受付番号</label>
+        <input class="app-input" type="text" name="acceptno" id="acceptno" placeholder="例：2026010100000001" />
       </div>
       <div class="input-box">
-        <label class="form-label">住所</label>
-        <input class="app-input" type="text" placeholder="例：東京都○○区○○">
+        <label class="form-label">日付</label>
+        <input class="app-input" type="date" name="date" id="date" />
       </div>
       <div class="input-box">
-        <label class="form-label">電話番号</label>
-        <input class="app-input" type="tel" placeholder="例：09012345678">
+        <label class="form-label">時間</label>
+        <input class="app-input" type="time" name="time" id="time" />
       </div>
       <div class="input-box">
-        <label class="form-label">個人番号</label>
-        <input class="app-input" type="text" placeholder="例：1234-5678-9012">
+        <label class="form-label">ユーザーIDなど</label>
+        <input class="app-input" type="text" name="userid" id="userid" placeholder="例：abcdefghij" />
       </div>
       <div class="btn-group">
         <button class="app-btn" type="submit">取引内容確認</button>
-        <button class="app-btn" type="reset" style="background:#87b6db;">入力クリア</button>
+        <button class="app-btn" type="reset">入力クリア</button>
       </div>
     </form>
   </div>
+
+  <!-- QRコード表示画面 -->
+  <div class="app-container" id="qr-container" style="display:none;">
+    <div class="qr-guide">
+      以下のQRコードをSmartcashstationでお読み取り下さい
+    </div>
+    <img id="qr-image" class="qr-code-img" src="" alt="QR Code" />
+    <div style="text-align:center; font-size:13px; color:#888;"><span id="qr-data-preview"></span></div>
+    <div class="btn-group" style="margin-top:18px;">
+      <button class="app-btn" type="button" id="finishButton">取引完了</button>
+      <button class="app-btn gray" type="button" id="cancelButton">キャンセル</button>
+    </div>
+  </div>
+
+  <script>
+    // カンマは見た目のみ
+    const displayAmount = document.getElementById('display_amount');
+    const amountHidden = document.getElementById('amount');
+    let isComposing = false;
+    displayAmount.addEventListener('compositionstart', function() {
+      isComposing = true;
+    });
+    displayAmount.addEventListener('compositionend', function() {
+      isComposing = false;
+      updateAmount();
+    });
+    displayAmount.addEventListener('input', function() {
+      if (!isComposing) {
+        updateAmount();
+      }
+    });
+    function updateAmount() {
+      let val = displayAmount.value.replace(/[０-９]/g, function(s) {
+        return String.fromCharCode(s.charCodeAt(0) - 65248);
+      });
+      val = val.replace(/[^\d]/g, '');
+      amountHidden.value = val;
+      if (val) {
+        displayAmount.value = parseInt(val, 10).toLocaleString();
+      } else {
+        displayAmount.value = '';
+      }
+    }
+    document.getElementById('transactionForm').addEventListener('reset', function() {
+      setTimeout(() => {
+        displayAmount.value = '';
+        amountHidden.value = '';
+      }, 10);
+    });
+
+    // 画面切り替え
+    const formContainer = document.getElementById('form-container');
+    const qrContainer = document.getElementById('qr-container');
+    const qrImage = document.getElementById('qr-image');
+    const qrDataPreview = document.getElementById('qr-data-preview');
+
+    // QRコード生成仕様: `種別;受付番号;日付;時間;ユーザーID`
+    document.getElementById('transactionForm').addEventListener('submit', function(e){
+      e.preventDefault();
+      // 値の取得
+      const type = document.querySelector('input[name="type"]:checked').value; // 100（入金）／200（出金）
+      const acceptno = document.getElementById('acceptno').value || '';
+      const date = document.getElementById('date').value || '';
+      const time = document.getElementById('time').value || '';
+      const userid = document.getElementById('userid').value || '';
+
+      // QRデータ生成
+      // 例: 100;2026010100000001;2026-01-01;13:05;abcdefghij
+      const qrData = [type, acceptno, date, time, userid].join(';');
+
+      // 画面にも内容を一応プレビュー
+      qrDataPreview.textContent = qrData;
+
+      // APIに渡すURLを生成
+      const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(qrData)}`;
+      qrImage.src = qrSrc;
+
+      formContainer.style.display = 'none';
+      qrContainer.style.display = 'block';
+    });
+
+    function resetToForm() {
+      qrContainer.style.display = 'none';
+      formContainer.style.display = 'block';
+      document.getElementById('transactionForm').reset();
+      qrDataPreview.textContent = '';
+    }
+    document.getElementById('finishButton').addEventListener('click', resetToForm);
+    document.getElementById('cancelButton').addEventListener('click', resetToForm);
+  </script>
 </body>
 </html>
