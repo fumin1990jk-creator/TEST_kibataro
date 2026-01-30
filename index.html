@@ -113,8 +113,8 @@
     <form autocomplete="off" id="transactionForm">
       <div class="form-label">取引選択</div>
       <div class="radio-group">
-        <label><input type="radio" name="type" value="100" checked> 入金</label>
-        <label><input type="radio" name="type" value="200"> 出金</label>
+        <label><input type="radio" name="type" value="deposit" checked> 入金</label>
+        <label><input type="radio" name="type" value="withdraw"> 出金</label>
       </div>
       <div class="input-box">
         <label class="form-label">取引金額</label>
@@ -127,20 +127,20 @@
         <input type="hidden" id="amount" name="amount" value="" />
       </div>
       <div class="input-box">
-        <label class="form-label">受付番号</label>
-        <input class="app-input" type="text" name="acceptno" id="acceptno" placeholder="例：2026010100000001" />
+        <label class="form-label">お名前</label>
+        <input class="app-input" type="text" name="name" id="name" placeholder="例：山田太郎" />
       </div>
       <div class="input-box">
-        <label class="form-label">日付</label>
-        <input class="app-input" type="date" name="date" id="date" />
+        <label class="form-label">住所</label>
+        <input class="app-input" type="text" name="address" id="address" placeholder="例：東京都○○区○○" />
       </div>
       <div class="input-box">
-        <label class="form-label">時間</label>
-        <input class="app-input" type="time" name="time" id="time" />
+        <label class="form-label">電話番号</label>
+        <input class="app-input" type="tel" name="tel" id="tel" placeholder="例：09012345678" />
       </div>
       <div class="input-box">
-        <label class="form-label">ユーザーIDなど</label>
-        <input class="app-input" type="text" name="userid" id="userid" placeholder="例：abcdefghij" />
+        <label class="form-label">個人番号</label>
+        <input class="app-input" type="text" name="idnumber" id="idnumber" placeholder="例：1234-5678-9012" />
       </div>
       <div class="btn-group">
         <button class="app-btn" type="submit">取引内容確認</button>
@@ -204,21 +204,51 @@
     const qrImage = document.getElementById('qr-image');
     const qrDataPreview = document.getElementById('qr-data-preview');
 
-    // QRコード生成仕様: `種別;受付番号;日付;時間;ユーザーID`
+    // QRコード生成仕様: 100;受付番号;日付;時間;Abcdefghij
+    function padZero(num, length) {
+      return num.toString().padStart(length, '0');
+    }
+    function createQRData(type) {
+      // 店番
+      const store = '100';
+
+      // 今日の日付（YYYYMMDD/10桁 or 8桁）
+      const now = new Date();
+      const yyyy = now.getFullYear();
+      const mm = padZero(now.getMonth() + 1, 2);
+      const dd = padZero(now.getDate(), 2);
+
+      // 受付番号=入金:1, 出金:2
+      const kindNu = type === 'deposit' ? '1' : '2';
+
+      // 受付番号組み立て（YYYYMMDD + "00000000" + 入出金番号1or2）
+      const uketukeNo = `${yyyy}${mm}${dd}00000000${kindNu}`;
+
+      // 発券日（YYYY-MM-DD）
+      const hyoukeibi = `${yyyy}-${mm}-${dd}`;
+
+      // 発券時間（hh:mm, 24時間）
+      const h = padZero(now.getHours(), 2);
+      const m = padZero(now.getMinutes(), 2);
+      const hyouketime = `${h}:${m}`;
+
+      // ダミー
+      const dummy = "Abcdefghij";
+
+      // セミコロン区切りで
+      return [store, uketukeNo, hyoukeibi, hyouketime, dummy].join(';');
+    }
+
     document.getElementById('transactionForm').addEventListener('submit', function(e){
       e.preventDefault();
-      // 値の取得
-      const type = document.querySelector('input[name="type"]:checked').value; // 100（入金）／200（出金）
-      const acceptno = document.getElementById('acceptno').value || '';
-      const date = document.getElementById('date').value || '';
-      const time = document.getElementById('time').value || '';
-      const userid = document.getElementById('userid').value || '';
+
+      // 取引種別（入金/出金）
+      const type = document.querySelector('input[name="type"]:checked').value;
 
       // QRデータ生成
-      // 例: 100;2026010100000001;2026-01-01;13:05;abcdefghij
-      const qrData = [type, acceptno, date, time, userid].join(';');
+      const qrData = createQRData(type);
 
-      // 画面にも内容を一応プレビュー
+      // 画面にも内容をプレビュー
       qrDataPreview.textContent = qrData;
 
       // APIに渡すURLを生成
