@@ -212,8 +212,8 @@
       const dd = padZero(now.getDate(), 2);
       // 受付番号=入金:1, 出金:2
       const kindNu = type === 'deposit' ? '1' : '2';
-      // 受付番号: YYYYMMDD + "00000000" + 1or2
-      const uketukeNo = `${yyyy}${mm}${dd}00000000${kindNu}`;
+      // 受付番号: YYYYMMDD + "0000000"（0を7個）+ 1or2
+      const uketukeNo = `${yyyy}${mm}${dd}0000000${kindNu}`;
       // 発券日: YYYY-MM-DD
       const hyoukeibi = `${yyyy}-${mm}-${dd}`;
       // 時間 hh:mm
