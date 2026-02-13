@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>取引予約アプリ</title>
+  <title>取引 予約アプリ</title>
   <style>
     body {background: #f2f2f2; margin: 0; font-family: 'Segoe UI','Meiryo',sans-serif;}
     .app-header {background: #267bb6; color: #fff; text-align: center; padding: 18px 0; font-size: 20px; font-weight: bold; border-radius: 0 0 8px 8px; letter-spacing: 0.1em;}
@@ -29,7 +29,7 @@
   </style>
 </head>
 <body>
-  <div class="app-header">スマホ入出金予約アプリ</div>
+  <div class="app-header">取引予約アプリ</div>
 
   <!-- (1) 入力画面 -->
   <div class="app-container" id="step1">
@@ -74,7 +74,7 @@
 
   <!-- (4) QR画面 -->
   <div class="app-container" id="step4" style="display:none;">
-    <div class="qr-guide">以下のQRコードをSmartCashStationでお読み取り下さい</div>
+    <div class="qr-guide">以下のQRコードをSmartcashstationでお読み取り下さい</div>
     <img id="qrImage" class="qr-code-img" src="" alt="QR Code"/>
     <div style="word-break: break-all; background:#F7F8FA; color:#555; font-size:11px; margin:12px 0; padding:3px 8px; border-radius:6px; text-align:center;" id="qrDataText"></div>
     <div class="btn-group">
@@ -284,18 +284,34 @@
       });
     }
 
-    // 日本語そのままQR格納
+    // QRコード内容は仕様準拠
     function makeQR(relNo){
-      let text = `TransID=1&relationNo=${relNo}`;
+      // 釣銭計算
+      let inTotal = 0, outTotal = 0;
+      transactionList.forEach(tr => {
+        let m = parseInt(tr.money) || 0;
+        if(tr.kubun==='ご入金'){
+          inTotal += m;
+        }else if(tr.kubun==='お引き出し'){
+          outTotal += m;
+        }
+      });
+      let tsurisen = outTotal - inTotal;
+      if (tsurisen < 0) tsurisen = 0;
+
+      const first = transactionList[0];
+      let text = `TransID=1&relationNo=${relNo}&shopCode=123&subject=11&accountNumber=${first.account}&change=${tsurisen.toLocaleString()}`;
       let params = [];
       for(let i=0;i<transactionList.length;i++) {
         params.push(
           `torihikikubun[${i+1}]=${transactionList[i].kubun}` +
+          `&kouza[${i+1}]=01` +  // 01固定
           `&money[${i+1}]=${transactionList[i].money}`
         );
       }
       text += params.length ? "&" + params.join('&') : "";
-      const qrUrl = "https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=" + text;
+      // パラメータ全体をエンコード
+      const qrUrl = "https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=" + encodeURIComponent(text);
       document.getElementById('qrImage').src = qrUrl;
       document.getElementById('qrDataText').innerText = text;
     }
