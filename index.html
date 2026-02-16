@@ -24,11 +24,33 @@
     .app-btn.gray{background:#b0bac7; color:#222;}
     .error-msg {color:#C33; margin:4px 0 8px 2px; font-size:13px;}
     .qr-guide {color: #222; font-size: 16px; margin-bottom: 24px; text-align: center;}
-    .qr-code-img {display: block; margin: 24px auto 30px auto; width: 180px; height: 180px; background: #eee; border-radius: 16px; object-fit: contain; overflow: hidden;}
-    @media (max-width: 480px) {.app-container {padding: 12px 3vw 11px 3vw;}}
 
-    /* qrcode-generator が生成する img 用 */
-    #qrcode img { width:180px; height:180px; display:block; margin:0 auto; border-radius:16px; }
+    /* === QR表示：角丸は外枠だけ / 余白はviewBoxで削る === */
+    .qr-frame{
+      width:180px;
+      height:180px;
+      margin:24px auto 30px auto;
+      background:#eee;
+      border-radius:16px;
+      padding:10px;
+      box-sizing:border-box;
+    }
+    .qr-clip{
+      width:100%;
+      height:100%;
+      overflow:hidden; /* ここは念のため（通常は切れない） */
+      background:#fff;
+    }
+    #qrcode svg{
+      width:100%;
+      height:100%;
+      display:block;
+      background:#fff;
+      /* scaleは使わない（四隅が切れる原因） */
+      transform:none;
+    }
+
+    @media (max-width: 480px) {.app-container {padding: 12px 3vw 11px 3vw;}}
   </style>
 </head>
 <body>
@@ -79,8 +101,11 @@
   <div class="app-container" id="step4" style="display:none;">
     <div class="qr-guide">以下のQRコードをSmartCashStationでお読み取り下さい</div>
 
-    <!-- ローカル描画（qrcode-generator） -->
-    <div id="qrcode" class="qr-code-img"></div>
+    <div class="qr-frame">
+      <div class="qr-clip">
+        <div id="qrcode"></div>
+      </div>
+    </div>
 
     <div style="word-break: break-all; background:#F7F8FA; color:#555; font-size:11px; margin:12px 0; padding:3px 8px; border-radius:6px; text-align:center;" id="qrDataText"></div>
     <div class="btn-group">
@@ -88,11 +113,6 @@
     </div>
   </div>
 
-  <!--
-    ローカル配置（同一フォルダに置く想定）：
-      ./qrcode-generator.min.js  （中身は qrcode-generator の qrcode.js を保存したものでもOK）
-      ./encoding.min.js          （encoding-japanese の encoding.min.js を保存したもの）
-  -->
   <script src="./qrcode-generator.min.js"></script>
   <script src="./encoding.min.js"></script>
 
@@ -288,12 +308,9 @@
       });
     }
 
-    // ===== 高速化：version総当たり（1..40）を廃止し、推定version→数回だけ試す =====
     function pickStartVersionBySjisBytes(sjisBytesLen){
-      // ECC=L / Byteモードの「だいたいの最大格納バイト数」（目安）
-      // 厳密表ではないが、開始version推定用として十分に効果がある。
       const approxCap = [
-        0,   // dummy
+        0,
         17, 32, 53, 78, 106, 134, 154, 192, 230, 271,
         321, 367, 425, 458, 520, 586, 644, 718, 792, 858,
         929, 1003, 1091, 1171, 1273, 1367, 1465, 1528, 1628, 1732,
@@ -310,17 +327,15 @@
       const startV = pickStartVersionBySjisBytes(sjisBytesLen);
       const maxTry = Math.min(40, startV + 6);
 
-      // まずは「推定version〜推定+6」だけ試す（ここでほぼ決まる）
       for (let ver = startV; ver <= maxTry; ver++) {
         try {
-          const qr = qrcode(ver, ecc);     // Model2
-          qr.addData(bytestr, 'Byte');     // バイナリ（バイト）モード
+          const qr = qrcode(ver, ecc);
+          qr.addData(bytestr, 'Byte');
           qr.make();
           return qr;
         } catch (e) {}
       }
 
-      // 念のため：まだ入らなければ残りを試す（通常ここまで来ない）
       for (let ver = maxTry + 1; ver <= 40; ver++) {
         try {
           const qr = qrcode(ver, ecc);
@@ -332,14 +347,7 @@
       return null;
     }
 
-    // QRコード仕様：
-    // - Model2
-    // - バイナリ（Byte）モード
-    // - 誤り訂正：L
-    // - 文字コード：SJIS（Shift_JIS）
-    // - version：自動（必要最小を狙って高速に決定）
     function makeQR(relNo){
-      // 釣銭計算
       let inTotal = 0, outTotal = 0;
       transactionList.forEach(tr => {
         let m = parseInt(tr.money) || 0;
@@ -361,7 +369,6 @@
       }
       text += params.length ? "&" + params.join('&') : "";
 
-      // Shift_JIS へ変換（バイト列）
       const unicodeCodes = Encoding.stringToCode(text);
       const sjisCodes = Encoding.convert(unicodeCodes, { to: 'SJIS', from: 'UNICODE' });
 
@@ -377,7 +384,30 @@
       }
 
       const qrcodeDiv = document.getElementById('qrcode');
-      qrcodeDiv.innerHTML = qrObj.createSvgTag({ cellSize: 4, margin: 0 });
+
+      // まずSVG生成（余白ありで作る）
+      const svg = qrObj.createSvgTag({ cellSize: 4, margin: 4 });
+
+      qrcodeDiv.innerHTML = svg;
+
+      // ---- ここから「余白だけ」削る（scaleではなく viewBox を詰める）----
+      const svgEl = qrcodeDiv.querySelector('svg');
+      if (svgEl) {
+        const vb = (svgEl.getAttribute('viewBox') || '').trim();
+        // viewBoxが無い/想定外なら何もしない
+        if (vb) {
+          const parts = vb.split(/\s+/).map(Number);
+          if (parts.length === 4 && parts.every(n => Number.isFinite(n))) {
+            const CROP = 6; // ←余白を切る量(px)。4〜8推奨。大きくしすぎると本体が切れる
+            let [x, y, w, h] = parts;
+            x += CROP; y += CROP; w -= CROP * 2; h -= CROP * 2;
+            // 破綻防止
+            if (w > 0 && h > 0) svgEl.setAttribute('viewBox', `${x} ${y} ${w} ${h}`);
+          }
+        }
+        svgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+      }
+      // -----------------------------------------------------------------
 
       document.getElementById('qrDataText').innerText = text;
     }
@@ -393,4 +423,3 @@
   </script>
 </body>
 </html>
-
