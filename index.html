@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>取引 予約アプリ</title>
+  <title>スマホ取引予約アプリ</title>
   <style>
     body {background: #f2f2f2; margin: 0; font-family: 'Segoe UI','Meiryo',sans-serif;}
     .app-header {background: #267bb6; color: #fff; text-align: center; padding: 18px 0; font-size: 20px; font-weight: bold; border-radius: 0 0 8px 8px; letter-spacing: 0.1em;}
@@ -24,12 +24,15 @@
     .app-btn.gray{background:#b0bac7; color:#222;}
     .error-msg {color:#C33; margin:4px 0 8px 2px; font-size:13px;}
     .qr-guide {color: #222; font-size: 16px; margin-bottom: 24px; text-align: center;}
-    .qr-code-img {display: block; margin: 24px auto 30px auto; width: 180px; height: 180px; background: #eee; border-radius: 16px;}
+    .qr-code-img {display: block; margin: 24px auto 30px auto; width: 180px; height: 180px; background: #eee; border-radius: 16px; object-fit: contain; overflow: hidden;}
     @media (max-width: 480px) {.app-container {padding: 12px 3vw 11px 3vw;}}
+
+    /* qrcode-generator が生成する img 用 */
+    #qrcode img { width:180px; height:180px; display:block; margin:0 auto; border-radius:16px; }
   </style>
 </head>
 <body>
-  <div class="app-header">取引予約アプリ</div>
+  <div class="app-header">スマホ取引予約アプリ</div>
 
   <!-- (1) 入力画面 -->
   <div class="app-container" id="step1">
@@ -75,12 +78,23 @@
   <!-- (4) QR画面 -->
   <div class="app-container" id="step4" style="display:none;">
     <div class="qr-guide">以下のQRコードをSmartcashstationでお読み取り下さい</div>
-    <img id="qrImage" class="qr-code-img" src="" alt="QR Code"/>
+
+    <!-- ローカル描画（qrcode-generator） -->
+    <div id="qrcode" class="qr-code-img"></div>
+
     <div style="word-break: break-all; background:#F7F8FA; color:#555; font-size:11px; margin:12px 0; padding:3px 8px; border-radius:6px; text-align:center;" id="qrDataText"></div>
     <div class="btn-group">
       <button type="button" class="app-btn" id="finishBtn">完了</button>
     </div>
   </div>
+
+  <!--
+    ローカル配置（同一フォルダに置く想定）：
+      ./qrcode-generator.min.js  （中身は qrcode-generator の qrcode.js を保存したものでもOK）
+      ./encoding.min.js          （encoding-japanese の encoding.min.js を保存したもの）
+  -->
+  <script src="./qrcode-generator.min.js"></script>
+  <script src="./encoding.min.js"></script>
 
   <script>
     const accountOptions = [
@@ -126,6 +140,7 @@
             ${transactionList.length>1?'<button type="button" class="add-btn-small" onclick="removeTransaction('+idx+')">削除</button>':''}
           </div>`;
       });
+
       transactionList.forEach((tr, idx) => {
         document.querySelectorAll(`[name="kubun${idx}"]`).forEach(ele => {
           ele.onchange = e => { transactionList[idx].kubun = e.target.value; };
@@ -139,17 +154,10 @@
         moneyInput.addEventListener('input', e => {
           let raw = e.target.value.replace(/[^\d]/g, '').slice(0, 6);
           transactionList[idx].money = raw;
-          if (raw) {
-            e.target.value = Number(raw).toLocaleString();
-          } else {
-            e.target.value = '';
-          }
+          if (raw) e.target.value = Number(raw).toLocaleString();
+          else e.target.value = '';
         });
-        if (tr.money) {
-          moneyInput.value = Number(tr.money).toLocaleString();
-        } else {
-          moneyInput.value = '';
-        }
+        moneyInput.value = tr.money ? Number(tr.money).toLocaleString() : '';
       });
     }
 
@@ -210,11 +218,8 @@
         let inTotal = 0, outTotal = 0;
         transactionList.forEach(tr => {
           let m = parseInt(tr.money) || 0;
-          if(tr.kubun==='ご入金'){
-            inTotal += m;
-          }else if(tr.kubun==='お引き出し'){
-            outTotal += m;
-          }
+          if(tr.kubun==='ご入金') inTotal += m;
+          else if(tr.kubun==='お引き出し') outTotal += m;
         });
         let tsurisen = outTotal - inTotal;
         if(tsurisen<0) tsurisen = 0;
@@ -254,7 +259,6 @@
         relationNoValue = v;
         document.getElementById('relationNoInputArea').style.display = 'none';
         document.getElementById('relationNoMaskArea').style.display = '';
-        document.getElementById('relationNoMaskArea').style.display = '';
       }
     });
     document.getElementById('maskedNo').onclick = function(){
@@ -284,17 +288,63 @@
       });
     }
 
-    // QRコード内容は仕様準拠
+    // ===== 高速化：version総当たり（1..40）を廃止し、推定version→数回だけ試す =====
+    function pickStartVersionBySjisBytes(sjisBytesLen){
+      // ECC=L / Byteモードの「だいたいの最大格納バイト数」（目安）
+      // 厳密表ではないが、開始version推定用として十分に効果がある。
+      const approxCap = [
+        0,   // dummy
+        17, 32, 53, 78, 106, 134, 154, 192, 230, 271,
+        321, 367, 425, 458, 520, 586, 644, 718, 792, 858,
+        929, 1003, 1091, 1171, 1273, 1367, 1465, 1528, 1628, 1732,
+        1840, 1952, 2068, 2188, 2303, 2431, 2563, 2699, 2809, 2953
+      ];
+      for (let v = 1; v <= 40; v++) {
+        if (sjisBytesLen <= approxCap[v]) return v;
+      }
+      return 40;
+    }
+
+    function buildQrFast(bytestr, sjisBytesLen){
+      const ecc = 'L';
+      const startV = pickStartVersionBySjisBytes(sjisBytesLen);
+      const maxTry = Math.min(40, startV + 6);
+
+      // まずは「推定version〜推定+6」だけ試す（ここでほぼ決まる）
+      for (let ver = startV; ver <= maxTry; ver++) {
+        try {
+          const qr = qrcode(ver, ecc);     // Model2
+          qr.addData(bytestr, 'Byte');     // バイナリ（バイト）モード
+          qr.make();
+          return qr;
+        } catch (e) {}
+      }
+
+      // 念のため：まだ入らなければ残りを試す（通常ここまで来ない）
+      for (let ver = maxTry + 1; ver <= 40; ver++) {
+        try {
+          const qr = qrcode(ver, ecc);
+          qr.addData(bytestr, 'Byte');
+          qr.make();
+          return qr;
+        } catch (e) {}
+      }
+      return null;
+    }
+
+    // QRコード仕様：
+    // - Model2
+    // - バイナリ（Byte）モード
+    // - 誤り訂正：L
+    // - 文字コード：SJIS（Shift_JIS）
+    // - version：自動（必要最小を狙って高速に決定）
     function makeQR(relNo){
       // 釣銭計算
       let inTotal = 0, outTotal = 0;
       transactionList.forEach(tr => {
         let m = parseInt(tr.money) || 0;
-        if(tr.kubun==='ご入金'){
-          inTotal += m;
-        }else if(tr.kubun==='お引き出し'){
-          outTotal += m;
-        }
+        if(tr.kubun==='ご入金') inTotal += m;
+        else if(tr.kubun==='お引き出し') outTotal += m;
       });
       let tsurisen = outTotal - inTotal;
       if (tsurisen < 0) tsurisen = 0;
@@ -305,14 +355,30 @@
       for(let i=0;i<transactionList.length;i++) {
         params.push(
           `torihikikubun[${i+1}]=${transactionList[i].kubun}` +
-          `&kouza[${i+1}]=01` +  // 01固定
+          `&kouza[${i+1}]=01` +
           `&money[${i+1}]=${transactionList[i].money}`
         );
       }
       text += params.length ? "&" + params.join('&') : "";
-      // パラメータ全体をエンコード
-      const qrUrl = "https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=" + encodeURIComponent(text);
-      document.getElementById('qrImage').src = qrUrl;
+
+      // Shift_JIS へ変換（バイト列）
+      const unicodeCodes = Encoding.stringToCode(text);
+      const sjisCodes = Encoding.convert(unicodeCodes, { to: 'SJIS', from: 'UNICODE' });
+
+      let bytestr = '';
+      for (let i = 0; i < sjisCodes.length; i++) bytestr += String.fromCharCode(sjisCodes[i]);
+
+      const qrObj = buildQrFast(bytestr, sjisCodes.length);
+      if (!qrObj) {
+        document.getElementById('qrcode').innerHTML = '';
+        document.getElementById('qrDataText').innerText = text;
+        alert('QRデータが大きすぎて生成できません（Version40でも溢れ）。データ短縮が必要です。');
+        return;
+      }
+
+      const qrcodeDiv = document.getElementById('qrcode');
+      qrcodeDiv.innerHTML = qrObj.createSvgTag({ cellSize: 4, margin: 0 });
+
       document.getElementById('qrDataText').innerText = text;
     }
 
@@ -320,6 +386,8 @@
       transactionList = [{ kubun: 'ご入金', account: accountOptions[0].number, accountType: accountOptions[0].type, money: '' }];
       renderTransactions();
       resetRelationNoInput();
+      document.getElementById('qrcode').innerHTML = '';
+      document.getElementById('qrDataText').innerText = '';
       showStep(1);
     };
   </script>
