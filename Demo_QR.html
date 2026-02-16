@@ -1,0 +1,395 @@
+﻿<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>スマホ取引予約アプリ</title>
+  <style>
+    body {background: #f2f2f2; margin: 0; font-family: 'Segoe UI','Meiryo',sans-serif;}
+    .app-header {background: #267bb6; color: #fff; text-align: center; padding: 18px 0; font-size: 20px; font-weight: bold; border-radius: 0 0 8px 8px; letter-spacing: 0.1em;}
+    .app-container {background: #fff; max-width: 420px; margin: 28px auto 0 auto; border-radius: 16px; box-shadow: 0 4px 16px rgba(80,120,160,0.07); padding: 26px 18px 20px 18px;}
+    .form-label {font-size: 13px; margin-bottom: 3px; font-weight: 500; display:block; color: #333;}
+    .transaction-items{margin-bottom:14px;}
+    .transaction-box {border: 1px solid #DFDFDF; border-radius: 8px; padding: 14px 12px; margin-bottom: 10px; background:#FAFDFF;}
+    .transaction-box .inline {display:inline-block; margin-right:12px;}
+    .radio-group label{margin-right:15px;}
+    .inlineinput {width:160px; margin-right:5px;}
+    .yen-label{margin-left:2px;}
+    .app-input {width: 130px; box-sizing:border-box; padding:8px 7px; border:1px solid #b0bac7; border-radius:5px; font-size:15px; background:#fafbfd;}
+    .app-input.short{width:60px;}
+    .add-btn-small {padding:4px 13px; background:#71aedc; color:#fff; border:none; border-radius:4px; margin-left:10px; cursor:pointer;}
+    .btn-group {display: flex; gap: 16px; margin-top: 22px;}
+    .app-btn {width: 100%; background:#267bb6; color:#fff; font-size:16px; border:none; border-radius:4px; padding:13px 0; font-weight:600; letter-spacing:0.07em; cursor:pointer; transition: background 0.2s;}
+    .app-btn:active {background: #175080;}
+    .app-btn.gray{background:#b0bac7; color:#222;}
+    .error-msg {color:#C33; margin:4px 0 8px 2px; font-size:13px;}
+    .qr-guide {color: #222; font-size: 16px; margin-bottom: 24px; text-align: center;}
+    .qr-code-img {display: block; margin: 24px auto 30px auto; width: 180px; height: 180px; background: #eee; border-radius: 16px; object-fit: contain; overflow: hidden;}
+    @media (max-width: 480px) {.app-container {padding: 12px 3vw 11px 3vw;}}
+
+    /* qrcode-generator が生成する img 用 */
+    #qrcode img { width:180px; height:180px; display:block; margin:0 auto; border-radius:16px; }
+  </style>
+</head>
+<body>
+  <div class="app-header">スマホ取引予約アプリ</div>
+
+  <!-- (1) 入力画面 -->
+  <div class="app-container" id="step1">
+    <form id="formStep1" autocomplete="off">
+      <div class="transaction-items" id="transactionItems"></div>
+      <button type="button" class="add-btn-small" id="addTransBtn">お取引追加</button>
+      <div class="btn-group">
+        <button type="submit" class="app-btn">次に進む</button>
+      </div>
+      <div class="error-msg" id="errorMsgStep1"></div>
+    </form>
+  </div>
+
+  <!-- (2) 入力内容確認画面 -->
+  <div class="app-container" id="step2" style="display:none;">
+    <div style="font-weight:600;margin-bottom:12px;">入力内容をご確認ください</div>
+    <div id="confirmList"></div>
+    <div class="btn-group">
+      <button type="button" class="app-btn" id="backStep1">戻る</button>
+      <button type="button" class="app-btn" id="toStep3">次に進む</button>
+    </div>
+  </div>
+
+  <!-- (3) 取引連携番号入力画面 -->
+  <div class="app-container" id="step3" style="display:none;">
+    <div style="font-weight:500;margin-bottom:13px;">取引連携番号を入力してください</div>
+    <form id="formStep3">
+      <div id="relationNoInputArea">
+        <input type="text" class="app-input short" maxlength="4" pattern="\d{4}" inputmode="numeric" id="relationNo" autocomplete="off" required />
+        <span class="yen-label">(4桁)</span>
+      </div>
+      <div id="relationNoMaskArea" style="display:none;">
+        <span id="maskedNo" style="font-size:22px;letter-spacing:9px;user-select:none;cursor:pointer;">****</span>
+      </div>
+      <div class="btn-group" style="margin-top:19px;" id="btnGroupStep3">
+        <button type="button" class="app-btn" id="backStep2">戻る</button>
+        <button type="submit" class="app-btn" id="toStep4Btn">次に進む</button>
+      </div>
+      <div class="error-msg" id="errorMsgStep3"></div>
+    </form>
+  </div>
+
+  <!-- (4) QR画面 -->
+  <div class="app-container" id="step4" style="display:none;">
+    <div class="qr-guide">以下のQRコードをSmartcashstationでお読み取り下さい</div>
+
+    <!-- ローカル描画（qrcode-generator） -->
+    <div id="qrcode" class="qr-code-img"></div>
+
+    <div style="word-break: break-all; background:#F7F8FA; color:#555; font-size:11px; margin:12px 0; padding:3px 8px; border-radius:6px; text-align:center;" id="qrDataText"></div>
+    <div class="btn-group">
+      <button type="button" class="app-btn" id="finishBtn">完了</button>
+    </div>
+  </div>
+
+  <!--
+    ローカル配置（同一フォルダに置く想定）：
+      ./qrcode-generator.min.js  （中身は qrcode-generator の qrcode.js を保存したものでもOK）
+      ./encoding.min.js          （encoding-japanese の encoding.min.js を保存したもの）
+  -->
+  <script src="./qrcode-generator.min.js"></script>
+  <script src="./encoding.min.js"></script>
+
+  <script>
+    const accountOptions = [
+      {number: "1234567", type: "普通"},
+      {number: "2345678", type: "当座"},
+      {number: "3456789", type: "貯蓄"}
+    ];
+    let transactionList = [
+      { kubun: 'ご入金', account: accountOptions[0].number, accountType: accountOptions[0].type, money: '' }
+    ];
+
+    function renderTransactions() {
+      const itemsDiv = document.getElementById('transactionItems');
+      itemsDiv.innerHTML = '';
+      transactionList.forEach((tr, idx) => {
+        let selectHtml = `<select name="account${idx}" class="app-input inlineinput" style="width:160px;">`;
+        accountOptions.forEach(opt => {
+          let selected = (tr.account === opt.number && tr.accountType === opt.type) ? 'selected' : '';
+          selectHtml += `<option value="${opt.number}|${opt.type}" ${selected}>${opt.number}（${opt.type}）</option>`;
+        });
+        selectHtml += '</select>';
+
+        itemsDiv.innerHTML += `
+          <div class="transaction-box" data-idx="${idx}">
+            <div>
+              <span class="form-label" style="margin-bottom:4px;">取引区分</span>
+              <span class="radio-group inline">
+                <label><input type="radio" name="kubun${idx}" value="ご入金" ${tr.kubun=='ご入金'?'checked':''}>ご入金</label>
+                <label><input type="radio" name="kubun${idx}" value="お引き出し" ${tr.kubun=='お引き出し'?'checked':''}>お引き出し</label>
+              </span>
+            </div>
+            <div style="margin:9px 0 0 0;">
+              <span class="form-label inline" style="width:90px;">口座番号</span>
+              ${selectHtml}
+            </div>
+            <div style="margin-top:11px;">
+              <span class="form-label inline" style="width:90px;">お取引金額</span>
+              <input type="text" class="app-input inlineinput" maxlength="6" inputmode="numeric"
+                value="${tr.money ? Number(tr.money).toLocaleString() : ''}"
+                name="money${idx}" required autocomplete="off" placeholder="例：10,000" />
+              <span class="yen-label">円</span>
+            </div>
+            ${transactionList.length>1?'<button type="button" class="add-btn-small" onclick="removeTransaction('+idx+')">削除</button>':''}
+          </div>`;
+      });
+
+      transactionList.forEach((tr, idx) => {
+        document.querySelectorAll(`[name="kubun${idx}"]`).forEach(ele => {
+          ele.onchange = e => { transactionList[idx].kubun = e.target.value; };
+        });
+        document.querySelector(`[name="account${idx}"]`).onchange = e => {
+          const [num, typ] = e.target.value.split('|');
+          transactionList[idx].account = num;
+          transactionList[idx].accountType = typ;
+        };
+        const moneyInput = document.querySelector(`[name="money${idx}"]`);
+        moneyInput.addEventListener('input', e => {
+          let raw = e.target.value.replace(/[^\d]/g, '').slice(0, 6);
+          transactionList[idx].money = raw;
+          if (raw) e.target.value = Number(raw).toLocaleString();
+          else e.target.value = '';
+        });
+        moneyInput.value = tr.money ? Number(tr.money).toLocaleString() : '';
+      });
+    }
+
+    window.removeTransaction = function(idx){
+      transactionList.splice(idx,1);
+      renderTransactions();
+    };
+
+    document.getElementById('addTransBtn').onclick = function(){
+      transactionList.push({ kubun: 'ご入金', account: accountOptions[0].number, accountType: accountOptions[0].type, money: '' });
+      renderTransactions();
+    };
+
+    renderTransactions();
+
+    document.getElementById('formStep1').onsubmit = function(e){
+      e.preventDefault();
+      const err = [];
+      transactionList.forEach((tr,idx) => {
+        if(!(tr.account)){
+          err.push(`取引${idx+1}の口座番号を選択してください`);
+        }
+        if(!(tr.money && tr.money.length>=1 && tr.money.length<=6)){
+          err.push(`取引${idx+1}のお取引金額は1～6桁で入力してください`);
+        }
+      });
+      if (err.length>0){
+        document.getElementById('errorMsgStep1').innerHTML = err.join('<br>');
+        return false;
+      }
+      document.getElementById('errorMsgStep1').innerHTML = '';
+      showStep(2);
+      fillConfirm();
+      return false;
+    };
+
+    function fillConfirm(){
+      const div = document.getElementById('confirmList');
+      let html = "";
+      transactionList.forEach((tr, idx) => {
+        let maru = '';
+        if(idx < 20){
+          maru = String.fromCharCode(9312+idx);
+        }else{
+          maru = String.fromCharCode(0xFF11+idx);
+        }
+        html += `
+        <div style="margin-bottom:13px;">
+          <b>お取引${maru}</b><br>
+          &emsp;お取引区分：${tr.kubun}<br>
+          &emsp;口座番号：${tr.account}（${tr.accountType}）<br>
+          &emsp;お取引金額：${Number(tr.money).toLocaleString()}円
+        </div>
+        `;
+      });
+
+      if (transactionList.length > 1) {
+        let inTotal = 0, outTotal = 0;
+        transactionList.forEach(tr => {
+          let m = parseInt(tr.money) || 0;
+          if(tr.kubun==='ご入金') inTotal += m;
+          else if(tr.kubun==='お引き出し') outTotal += m;
+        });
+        let tsurisen = outTotal - inTotal;
+        if(tsurisen<0) tsurisen = 0;
+        html += `<div style="font-weight:600; margin-top:18px;">釣銭：${tsurisen.toLocaleString()}円</div>`;
+      }
+
+      div.innerHTML = html;
+    }
+
+    document.getElementById('backStep1').onclick = function(){
+      showStep(1);
+    };
+    document.getElementById('toStep3').onclick = function(){
+      showStep(3);
+      resetRelationNoInput();
+    };
+
+    let relationNoValue = "";
+    function resetRelationNoInput(){
+      document.getElementById('relationNoInputArea').style.display = '';
+      document.getElementById('relationNoMaskArea').style.display = 'none';
+      document.getElementById('relationNo').value = '';
+      document.getElementById('relationNo').disabled = false;
+      document.getElementById('errorMsgStep3').innerText = '';
+      document.getElementById('backStep2').style.display = '';
+      const btn = document.getElementById('toStep4Btn');
+      btn.type = "submit";
+      btn.onclick = null;
+      relationNoValue = "";
+    }
+
+    const relationNoInput = document.getElementById('relationNo');
+    relationNoInput.addEventListener('input', function(e){
+      let v = e.target.value.replace(/[^\d]/g, '').slice(0,4);
+      e.target.value = v;
+      if(v.length === 4){
+        relationNoValue = v;
+        document.getElementById('relationNoInputArea').style.display = 'none';
+        document.getElementById('relationNoMaskArea').style.display = '';
+      }
+    });
+    document.getElementById('maskedNo').onclick = function(){
+      resetRelationNoInput();
+    };
+
+    document.getElementById('formStep3').onsubmit = function(e){
+      e.preventDefault();
+      if(relationNoValue.length!==4){
+        document.getElementById('errorMsgStep3').innerText = "4桁の番号を入力してください";
+        return false;
+      }
+      document.getElementById('errorMsgStep3').innerText = "";
+      showStep(4);
+      makeQR(relationNoValue);
+      setTimeout(resetRelationNoInput,200);
+      return false;
+    };
+
+    document.getElementById('backStep2').onclick = function(){
+      showStep(2);
+    };
+
+    function showStep(num){
+      ['step1','step2','step3','step4'].forEach(id => {
+        document.getElementById(id).style.display = (id==='step'+num)?'':'none';
+      });
+    }
+
+    // ===== 高速化：version総当たり（1..40）を廃止し、推定version→数回だけ試す =====
+    function pickStartVersionBySjisBytes(sjisBytesLen){
+      // ECC=L / Byteモードの「だいたいの最大格納バイト数」（目安）
+      // 厳密表ではないが、開始version推定用として十分に効果がある。
+      const approxCap = [
+        0,   // dummy
+        17, 32, 53, 78, 106, 134, 154, 192, 230, 271,
+        321, 367, 425, 458, 520, 586, 644, 718, 792, 858,
+        929, 1003, 1091, 1171, 1273, 1367, 1465, 1528, 1628, 1732,
+        1840, 1952, 2068, 2188, 2303, 2431, 2563, 2699, 2809, 2953
+      ];
+      for (let v = 1; v <= 40; v++) {
+        if (sjisBytesLen <= approxCap[v]) return v;
+      }
+      return 40;
+    }
+
+    function buildQrFast(bytestr, sjisBytesLen){
+      const ecc = 'L';
+      const startV = pickStartVersionBySjisBytes(sjisBytesLen);
+      const maxTry = Math.min(40, startV + 6);
+
+      // まずは「推定version〜推定+6」だけ試す（ここでほぼ決まる）
+      for (let ver = startV; ver <= maxTry; ver++) {
+        try {
+          const qr = qrcode(ver, ecc);     // Model2
+          qr.addData(bytestr, 'Byte');     // バイナリ（バイト）モード
+          qr.make();
+          return qr;
+        } catch (e) {}
+      }
+
+      // 念のため：まだ入らなければ残りを試す（通常ここまで来ない）
+      for (let ver = maxTry + 1; ver <= 40; ver++) {
+        try {
+          const qr = qrcode(ver, ecc);
+          qr.addData(bytestr, 'Byte');
+          qr.make();
+          return qr;
+        } catch (e) {}
+      }
+      return null;
+    }
+
+    // QRコード仕様：
+    // - Model2
+    // - バイナリ（Byte）モード
+    // - 誤り訂正：L
+    // - 文字コード：SJIS（Shift_JIS）
+    // - version：自動（必要最小を狙って高速に決定）
+    function makeQR(relNo){
+      // 釣銭計算
+      let inTotal = 0, outTotal = 0;
+      transactionList.forEach(tr => {
+        let m = parseInt(tr.money) || 0;
+        if(tr.kubun==='ご入金') inTotal += m;
+        else if(tr.kubun==='お引き出し') outTotal += m;
+      });
+      let tsurisen = outTotal - inTotal;
+      if (tsurisen < 0) tsurisen = 0;
+
+      const first = transactionList[0];
+      let text = `TransID=1&relationNo=${relNo}&shopCode=123&subject=11&accountNumber=${first.account}&change=${tsurisen.toLocaleString()}`;
+      let params = [];
+      for(let i=0;i<transactionList.length;i++) {
+        params.push(
+          `torihikikubun[${i+1}]=${transactionList[i].kubun}` +
+          `&kouza[${i+1}]=01` +
+          `&money[${i+1}]=${transactionList[i].money}`
+        );
+      }
+      text += params.length ? "&" + params.join('&') : "";
+
+      // Shift_JIS へ変換（バイト列）
+      const unicodeCodes = Encoding.stringToCode(text);
+      const sjisCodes = Encoding.convert(unicodeCodes, { to: 'SJIS', from: 'UNICODE' });
+
+      let bytestr = '';
+      for (let i = 0; i < sjisCodes.length; i++) bytestr += String.fromCharCode(sjisCodes[i]);
+
+      const qrObj = buildQrFast(bytestr, sjisCodes.length);
+      if (!qrObj) {
+        document.getElementById('qrcode').innerHTML = '';
+        document.getElementById('qrDataText').innerText = text;
+        alert('QRデータが大きすぎて生成できません（Version40でも溢れ）。データ短縮が必要です。');
+        return;
+      }
+
+      const qrcodeDiv = document.getElementById('qrcode');
+      qrcodeDiv.innerHTML = qrObj.createSvgTag({ cellSize: 4, margin: 0 });
+
+      document.getElementById('qrDataText').innerText = text;
+    }
+
+    document.getElementById('finishBtn').onclick = function(){
+      transactionList = [{ kubun: 'ご入金', account: accountOptions[0].number, accountType: accountOptions[0].type, money: '' }];
+      renderTransactions();
+      resetRelationNoInput();
+      document.getElementById('qrcode').innerHTML = '';
+      document.getElementById('qrDataText').innerText = '';
+      showStep(1);
+    };
+  </script>
+</body>
+</html>
